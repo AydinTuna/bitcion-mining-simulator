@@ -1,10 +1,14 @@
 import { elapsedTimeFormatter, dateFormatter, readFile, writeToFile, objectToHex } from './helpers.js';
 import { createHash } from 'crypto';
 
+let actualMiningTime = 1
+let difficulty = 1
+let difficultyRatio = 1
 let isMined = false
 let candidateBlockHash = ""
+let blockHeight = -1
 let nonce = -1
-const blockHeader = {
+let blockHeader = {
     version: "",
     previousBlock: "",
     merkleRoot: "",
@@ -13,13 +17,14 @@ const blockHeader = {
     nonce: nonce
 }
 
-
-const MAX_TARGET = "0x000ffff000000000000000000000000000000000000000000000000000000000"
-const DIFFICULTY = (10 / 9) * 42468
-const TARGET = "0x" + (parseInt(MAX_TARGET, 16) / DIFFICULTY).toString(16).padStart(64, "0")
-console.log("Target: ", TARGET);
+const EXPECTED_MINING_TIME = 6
+const DIFFICULTY_PERIOD = 6
+const MAX_TARGET = "0x0000ffff0000000000000000000000000000000000000000000000000000000"
+let target = "0x" + (parseInt(MAX_TARGET, 16) / difficulty).toString(16).padStart(64, "0")
 const BITCOIN_WALLET = "wallet.json"
+const BLOCKCHAIN_FILE = "blockchain.json"
 const BLOCK_REWARD = 3.125
+
 
 
 
@@ -42,26 +47,9 @@ function hash(blockHeaderHex) {
     return hash256
 }
 
-async function getBitcoinLatestBlock() {
-    console.log("⏳ Latest block fetching process started!");
-    const latestBlockUrl = "https://blockchain.info/latestblock";
-    try {
-        const response = await fetch(latestBlockUrl);
-        if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-        const latestBlockData = await response.json();
-        console.log("✅ Latest block fetching process completed.");
-        return latestBlockData;
-    } catch (error) {
-        console.error('❌ Error fetching data:', error);
-        return null;
-    }
-}
-
-async function getRawBlockData(blockHash) {
+async function getRawBlockData() {
     console.log("⏳ Raw block data fetching process started!");
-    const rawBlockUrl = `https://blockchain.info/rawblock/${blockHash}`;
+    const rawBlockUrl = `https://blockchain.info/rawblock/${blockHeight}`;
     try {
         const response = await fetch(rawBlockUrl);
         if (!response.ok) {
@@ -76,9 +64,9 @@ async function getRawBlockData(blockHash) {
     }
 }
 
-async function fetchBlockHeader(blockHash) {
+async function fetchBlockHeader() {
     console.log("⏳ Block Header fetching process started!");
-    const rawBlockData = await getRawBlockData(blockHash)
+    const rawBlockData = await getRawBlockData()
     blockHeader.version = rawBlockData.ver
     blockHeader.previousBlock = rawBlockData.prev_block
     blockHeader.merkleRoot = rawBlockData.mrkl_root
@@ -87,50 +75,95 @@ async function fetchBlockHeader(blockHash) {
     console.log("✅ Block Header fetching process completed.");
 }
 
-async function mining() {
-    const bitcoinLastestBlock = await getBitcoinLatestBlock()
-    await fetchBlockHeader(bitcoinLastestBlock.hash)
-
-    const startTime = new Date();
-    const startTimeFormatted = dateFormatter(startTime)
-    console.log("⏳ Mining started!");
-    while (!isMined) {
-        nonce += 1
-        blockHeader.nonce = nonce
-        const blockHeaderHex = objectToHex(blockHeader)
-        const blockHeaderHash = hash(blockHeaderHex)
-        console.log("block header hash: ", blockHeaderHash);
-
-        if (parseInt(blockHeaderHash, 16) < parseInt(TARGET, 16)) {
-            candidateBlockHash = blockHeaderHash
-            let currentBalance = await readFile(BITCOIN_WALLET);
-            let updatedBalance = currentBalance + BLOCK_REWARD;
-            const updatedData = {
-                walletBalance: updatedBalance
-            };
-            await writeToFile(BITCOIN_WALLET, updatedData)
-            isMined = true
-        }
-        console.log("Mining Nonce: ", nonce);
-
+async function saveToBlockchain(blockHash) {
+    let blockchain = [];
+    try {
+        blockchain = await readFile(BLOCKCHAIN_FILE);
+    } catch {
+        console.log("Creating new blockchain file...");
     }
-    console.log("✅ Mining completed.");
-    console.log(`\n🎉 Yey! You earned ${BLOCK_REWARD} BTC 💰`);
-    const totalAmount = await readFile(BITCOIN_WALLET)
-    console.log("💰 Balance: ", totalAmount);
+
+    blockchain.push({ hash: blockHash, timestamp: Date.now(), blockHeight: blockHeight });
+    await writeToFile(BLOCKCHAIN_FILE, blockchain);
+}
+
+async function adjustDifficulty() {
+    let blockchainData = await readFile(BLOCKCHAIN_FILE)
+
+    const periodStart = blockchainData[blockHeight - 6].timestamp
+    const periodEnd = blockchainData[blockHeight - 1].timestamp
+
+    actualMiningTime = periodEnd - periodStart
+
+    difficultyRatio = actualMiningTime / EXPECTED_MINING_TIME
+
+    if (difficultyRatio >= 4) difficultyRatio = 4
+    else if (difficultyRatio <= 0.25) difficultyRatio = 0.25
+
+    difficulty = difficulty * difficultyRatio
+    target = "0x" + (parseInt(MAX_TARGET, 16) / difficulty).toString(16).padStart(64, "0")
+}
+
+async function mining() {
+    while (true) {
+        ++blockHeight
+        if (blockHeight % DIFFICULTY_PERIOD === 0 && blockHeight !== 0) {
+            await adjustDifficulty()
+        }
+        await fetchBlockHeader();
+
+        const startTime = new Date();
+        const startTimeFormatted = dateFormatter(startTime);
+        console.log("\n⏳ Mining started!");
+        isMined = false;
+
+        while (!isMined) {
+            nonce += 1;
+            blockHeader.nonce = nonce;
+            const blockHeaderHex = objectToHex(blockHeader);
+            const blockHeaderHash = hash(blockHeaderHex);
+
+            if (parseInt(blockHeaderHash, 16) < parseInt(target, 16)) {
+                candidateBlockHash = blockHeaderHash;
+
+                let currentBalance = await readFile(BITCOIN_WALLET) || 0;
+                let updatedBalance = currentBalance + BLOCK_REWARD;
+                const updatedData = { walletBalance: updatedBalance };
+                await writeToFile(BITCOIN_WALLET, updatedData);
+
+                await saveToBlockchain(candidateBlockHash);
+                isMined = true;
+            }
+            // console.log("Mining Nonce: ", nonce);
+        }
+
+        const endTime = new Date();
+        const endTimeFormatted = dateFormatter(endTime);
+        const total = endTime - startTime;
+
+        console.log("✅ Mining completed.");
+        console.log(`🎉 Yey! You earned ${BLOCK_REWARD} BTC 💰`);
+        console.log("💰 Balance: ", await readFile(BITCOIN_WALLET));
+        console.log("\nStart Time: ", startTimeFormatted);
+        console.log("Complete Time: ", endTimeFormatted);
+        console.log("Total: ", elapsedTimeFormatter(total));
+        console.log("\nNonce: ", nonce);
+        console.log("Block Hash: ", candidateBlockHash);
+        console.log("New Target: ", target);
+        console.log("Mining Difficulty: ", difficulty);
+        console.log("Difficulty Ratio: ", difficultyRatio);
 
 
-    const endTime = new Date();
-    const endTimeFormatted = dateFormatter(endTime)
-    const total = endTime - startTime;
-
-    console.log("\nStart Time: ", startTimeFormatted);
-    console.log("Complete Time: ", endTimeFormatted);
-    const totalFormatted = elapsedTimeFormatter(total)
-    console.log("Total: ", totalFormatted);
-
-    console.log("\nNonce: ", nonce);
-    console.log("Block Hash: ", candidateBlockHash);
-
+        // Reset variables for the new mining block
+        nonce = -1;
+        blockHeader = {
+            version: "",
+            previousBlock: "",
+            merkleRoot: "",
+            time: "",
+            bits: "",
+            nonce: nonce
+        };
+    }
 }
 mining()

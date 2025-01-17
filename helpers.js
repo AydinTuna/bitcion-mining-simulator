@@ -20,17 +20,28 @@ export function elapsedTimeFormatter(milliseconds) {
     return formattedTime
 }
 
-export function readFile(fileName, fileType) {
+export function readFile(fileName) {
     return new Promise((resolve, reject) => {
         fs.readFile(fileName, 'utf-8', (err, data) => {
             if (err) {
                 reject("Error reading the file: " + err);
-            } else if (fileType === "wallet") {
-                let jsonData = JSON.parse(data);
-                resolve(jsonData.walletBalance);
-            } else if (fileType === "wallet") {
-                let jsonData = JSON.parse(data)
-                resolve(jsonData)
+            } else if (!data.trim()) {
+                if (fileName === "blockchain.json") {
+                    resolve([]);
+                } else {
+                    resolve(0);
+                }
+            } else {
+                try {
+                    const jsonData = JSON.parse(data);
+                    if (fileName === "wallet.json") {
+                        resolve(jsonData.walletBalance);
+                    } else if (fileName === "blockchain.json") {
+                        resolve(jsonData);
+                    }
+                } catch (parseError) {
+                    reject("Error parsing JSON: " + parseError.message);
+                }
             }
         });
     });
