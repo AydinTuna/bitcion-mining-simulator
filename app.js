@@ -17,9 +17,9 @@ let blockHeader = {
     nonce: nonce
 }
 
-const EXPECTED_MINING_TIME = 6
-const DIFFICULTY_PERIOD = 6
-const MAX_TARGET = "0x0000ffff0000000000000000000000000000000000000000000000000000000"
+const DIFFICULTY_PERIOD = 20
+const EXPECTED_MINING_TIME = 30 * DIFFICULTY_PERIOD
+const MAX_TARGET = "0x00ffff000000000000000000000000000000000000000000000000000000000"
 let target = "0x" + (parseInt(MAX_TARGET, 16) / difficulty).toString(16).padStart(64, "0")
 const BITCOIN_WALLET = "wallet.json"
 const BLOCKCHAIN_FILE = "blockchain.json"
@@ -47,9 +47,29 @@ function hash(blockHeaderHex) {
     return hash256
 }
 
+async function getLatestBlockHeight() {
+    const blockHeightUrl = "https://blockchain.info/q/getblockcount";
+    try {
+        const response = await fetch(blockHeightUrl);
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        const latestBlockHeight = await response.json();
+        return latestBlockHeight;
+    } catch (error) {
+        console.error('❌ Error fetching data:', error);
+        return null;
+    }
+}
+
+function getRandomNumber(maxNumber) {
+    return Math.floor(Math.random() * ++maxNumber);
+}
+
 async function getRawBlockData() {
     console.log("⏳ Raw block data fetching process started!");
-    const rawBlockUrl = `https://blockchain.info/rawblock/${blockHeight}`;
+    const latestBlockHeight = await getLatestBlockHeight()
+    const rawBlockUrl = `https://blockchain.info/rawblock/${getRandomNumber(latestBlockHeight)}`;
     try {
         const response = await fetch(rawBlockUrl);
         if (!response.ok) {
@@ -83,38 +103,39 @@ async function saveToBlockchain(blockHash) {
         console.log("Creating new blockchain file...");
     }
 
-    blockchain.push({ hash: blockHash, timestamp: Date.now(), blockHeight: blockHeight });
+    blockchain.push({ hash: blockHash, timestamp: Math.floor(Date.now() / 1000), blockHeight: blockHeight });
     await writeToFile(BLOCKCHAIN_FILE, blockchain);
 }
 
 async function adjustDifficulty() {
     let blockchainData = await readFile(BLOCKCHAIN_FILE)
 
-    const periodStart = blockchainData[blockHeight - 6].timestamp
+    const periodStart = blockchainData[blockHeight - 20].timestamp
     const periodEnd = blockchainData[blockHeight - 1].timestamp
 
     actualMiningTime = periodEnd - periodStart
 
-    difficultyRatio = actualMiningTime / EXPECTED_MINING_TIME
+    difficultyRatio = parseFloat((EXPECTED_MINING_TIME / actualMiningTime).toPrecision(4))
 
     if (difficultyRatio >= 4) difficultyRatio = 4
     else if (difficultyRatio <= 0.25) difficultyRatio = 0.25
 
-    difficulty = difficulty * difficultyRatio
+    difficulty = parseFloat((difficulty * difficultyRatio).toPrecision(4))
     target = "0x" + (parseInt(MAX_TARGET, 16) / difficulty).toString(16).padStart(64, "0")
 }
 
 async function mining() {
     while (true) {
+        const startTime = new Date();
+        const startTimeFormatted = dateFormatter(startTime);
+        console.log("\n⏳ Mining started!");
+
         ++blockHeight
         if (blockHeight % DIFFICULTY_PERIOD === 0 && blockHeight !== 0) {
             await adjustDifficulty()
         }
         await fetchBlockHeader();
 
-        const startTime = new Date();
-        const startTimeFormatted = dateFormatter(startTime);
-        console.log("\n⏳ Mining started!");
         isMined = false;
 
         while (!isMined) {
