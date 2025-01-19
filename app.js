@@ -33,11 +33,6 @@ const BLOCK_REWARD = 3.125
 // If hashing output lower than mining difficulty
 // You can mine your transactions that in your mempool
 
-// Get latest block hash
-// Fetch the raw block data
-// Get the block header from raw block data
-// Hash the block header
-
 // Block header:
 // Version, Previous Block, Merkle Root, Time, Bits, Nonce
 
