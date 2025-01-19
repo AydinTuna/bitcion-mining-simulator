@@ -36,6 +36,11 @@ const BLOCK_REWARD = 3.125
 // Block header:
 // Version, Previous Block, Merkle Root, Time, Bits, Nonce
 
+// Idea: 
+// Add "bits" to the block header and save the target
+// So when the program is started after it has been stopped, 
+// it will be synchronised with the latest blockchain data.
+
 function hash(blockHeaderHex) {
     const sha256Hash = createHash('sha256').update(blockHeaderHex).digest('hex')
     const hash256 = createHash('sha256').update(sha256Hash).digest('hex')
