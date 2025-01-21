@@ -17,7 +17,14 @@ and mined blocks again with my own rules.
 
 I also fetched the block headers randomly, if I didn't I could get the same result when I run the programme every time.
 
-Mining difficulty and target change dynamically. I set the **Difficulty == 1**, **Difficulty Ratio == 1** and **Max Target == "0x00ffff000000000000000000000000000000000000000000000000000000000"** as default.
+Mining difficulty and target change dynamically. 
+
+I set: 
+- **Difficulty == 1**
+- **Difficulty Ratio == 1**
+- **Max Target == "0x00ffff000000000000000000000000000000000000000000000000000000000"**
+as default.
+
 When the simulator is run, the difficulty and difficulty ratio parameters adjust the mining target and set the block production time to an average of 30 seconds.
 
 ### Final Notes
