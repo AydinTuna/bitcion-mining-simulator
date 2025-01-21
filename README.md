@@ -25,7 +25,7 @@ I set:
 - **Max Target == "0x00ffff000000000000000000000000000000000000000000000000000000000"**
 as default.
 
-When the simulator is run, the difficulty and difficulty ratio parameters adjust the mining target and set the block production time to an average of 30 seconds.
+When the simulator is run, the difficulty and difficulty ratio parameters adjust the mining target and set the block production time to an average of 30 seconds. The mined blocks stored in the **blockchain.json** file and the block reward stored in the **wallet.json**
 
 ### Final Notes
 This programme taught me a lot about how bitcoin mining works. It can still be improved, there is no end, but I will stop here and move on to new projects.
