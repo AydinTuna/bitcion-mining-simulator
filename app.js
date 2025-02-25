@@ -1,5 +1,6 @@
 import { elapsedTimeFormatter, dateFormatter, readFile, writeToFile, objectToHex } from './helpers.js';
 import { createHash } from 'crypto';
+import { mockBlockHeaderBuilder } from './utils/mockBlockHeaderBuilder.js';
 
 let actualMiningTime = 1
 let difficulty = 1
@@ -7,15 +8,8 @@ let difficultyRatio = 1
 let isMined = false
 let candidateBlockHash = ""
 let blockHeight = -1
-let nonce = -1
-let blockHeader = {
-    version: "",
-    previousBlock: "",
-    merkleRoot: "",
-    time: "",
-    bits: "",
-    nonce: nonce
-}
+let nonce = 0
+let blockHeader = {}
 
 const DIFFICULTY_PERIOD = 20
 const EXPECTED_MINING_TIME = 30 * DIFFICULTY_PERIOD
@@ -24,17 +18,6 @@ let target = "0x" + (parseInt(MAX_TARGET, 16) / difficulty).toString(16).padStar
 const BITCOIN_WALLET = "wallet.json"
 const BLOCKCHAIN_FILE = "blockchain.json"
 const BLOCK_REWARD = 3.125
-
-
-
-
-
-// Rules:
-// If hashing output lower than mining difficulty
-// You can mine your transactions that in your mempool
-
-// Block header:
-// Version, Previous Block, Merkle Root, Time, Bits, Nonce
 
 // Idea: 
 // Add "bits" to the block header and save the target
@@ -45,54 +28,6 @@ function hash(blockHeaderHex) {
     const sha256Hash = createHash('sha256').update(blockHeaderHex).digest('hex')
     const hash256 = createHash('sha256').update(sha256Hash).digest('hex')
     return hash256
-}
-
-async function getLatestBlockHeight() {
-    const blockHeightUrl = "https://blockchain.info/q/getblockcount";
-    try {
-        const response = await fetch(blockHeightUrl);
-        if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-        const latestBlockHeight = await response.json();
-        return latestBlockHeight;
-    } catch (error) {
-        console.error('❌ Error fetching data:', error);
-        return null;
-    }
-}
-
-function getRandomNumber(maxNumber) {
-    return Math.floor(Math.random() * ++maxNumber);
-}
-
-async function getRawBlockData() {
-    console.log("⏳ Raw block data fetching process started!");
-    const latestBlockHeight = await getLatestBlockHeight()
-    const rawBlockUrl = `https://blockchain.info/rawblock/${getRandomNumber(latestBlockHeight)}`;
-    try {
-        const response = await fetch(rawBlockUrl);
-        if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-        const rawBlockData = await response.json();
-        console.log("✅ Raw block data fetching process completed.");
-        return rawBlockData;
-    } catch (error) {
-        console.error('❌ Error fetching data:', error);
-        return null;
-    }
-}
-
-async function fetchBlockHeader() {
-    console.log("⏳ Block Header fetching process started!");
-    const rawBlockData = await getRawBlockData()
-    blockHeader.version = rawBlockData.ver
-    blockHeader.previousBlock = rawBlockData.prev_block
-    blockHeader.merkleRoot = rawBlockData.mrkl_root
-    blockHeader.time = rawBlockData.time
-    blockHeader.bits = rawBlockData.bits
-    console.log("✅ Block Header fetching process completed.");
 }
 
 async function saveToBlockchain(blockHash) {
@@ -134,13 +69,12 @@ async function mining() {
         if (blockHeight % DIFFICULTY_PERIOD === 0 && blockHeight !== 0) {
             await adjustDifficulty()
         }
-        await fetchBlockHeader();
+        blockHeader = mockBlockHeaderBuilder(nonce);
 
         isMined = false;
 
         while (!isMined) {
-            nonce += 1;
-            blockHeader.nonce = nonce;
+
             const blockHeaderHex = objectToHex(blockHeader);
             const blockHeaderHash = hash(blockHeaderHex);
 
@@ -155,7 +89,8 @@ async function mining() {
                 await saveToBlockchain(candidateBlockHash);
                 isMined = true;
             }
-            // console.log("Mining Nonce: ", nonce);
+            nonce += 1;
+            blockHeader.nonce = nonce;
         }
 
         const endTime = new Date();
@@ -176,15 +111,8 @@ async function mining() {
 
 
         // Reset variables for the new mining block
-        nonce = -1;
-        blockHeader = {
-            version: "",
-            previousBlock: "",
-            merkleRoot: "",
-            time: "",
-            bits: "",
-            nonce: nonce
-        };
+        nonce = 0;
+        blockHeader = mockBlockHeaderBuilder(nonce)
     }
 }
 mining()
